@@ -1,4 +1,5 @@
-use shell::shell::Shell;
+use shell::Shell;
+
 mod shell;
 
 fn main() {
