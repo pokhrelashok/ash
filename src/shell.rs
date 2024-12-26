@@ -274,6 +274,23 @@ impl Shell {
             })
             .unwrap_or_else(|| "Unknown".to_string());
 
+        let sh = env::var("0").unwrap_or_else(|_| {
+            fs::read_to_string("/etc/passwd")
+                .unwrap_or_default()
+                .lines()
+                .find(|line| line.contains(&username))
+                .map(|line| {
+                    line.split(":")
+                        .last()
+                        .unwrap_or("Unknown")
+                        .split("/")
+                        .last()
+                        .unwrap_or("Unknown")
+                        .to_string()
+                })
+                .unwrap_or_else(|| "Unknown".to_string())
+        });
+
         // Collect system info
         let system_info = vec![
             format!("User:    {}", username),
@@ -283,13 +300,14 @@ impl Shell {
             format!("Uptime:  {}", uptime),
             format!("RAM:     {}", total_ram),
             format!("CPU:     {}", cpu_model),
+            format!("Shell:   {}", sh),
         ];
 
         // Print ASCII art and information side-by-side
         let art_lines: Vec<&str> = ascii_art.lines().collect();
         let info_lines = system_info;
 
-        let max_art_width = art_lines.iter().map(|line| line.len()).max().unwrap_or(0);
+        let max_art_width = art_lines.iter().map(|line| line.len()).max().unwrap_or(0) + 5;
 
         for (i, art_line) in art_lines.iter().enumerate() {
             print!("{}", art_line);
