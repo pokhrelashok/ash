@@ -56,6 +56,11 @@ impl Shell {
                         }
                         KeyCode::Up => {
                             if index > 0 {
+                                if index == self.command_history.len()
+                                    && self.command_history.last().unwrap() != input
+                                {
+                                    self.command_history.push(input.clone());
+                                }
                                 index -= 1;
                                 self.handle_arrow(input, index)?;
                             }
