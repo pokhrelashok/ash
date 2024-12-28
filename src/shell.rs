@@ -151,7 +151,16 @@ impl Shell {
     }
 
     fn print_prompt(&self, current_input: &str) {
-        print!("\r\x1b[2K> {}", current_input);
+        let cwd = env::current_dir()
+            .unwrap_or_default()
+            .into_os_string()
+            .into_string()
+            .unwrap_or("".to_string());
+        print!(
+            "\r\x1b[2K{}> {}",
+            cwd.split("/").last().unwrap_or_default(),
+            current_input
+        );
         io::stdout().flush().unwrap();
     }
 
