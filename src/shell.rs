@@ -1,6 +1,6 @@
 use crossterm::{
     cursor::EnableBlinking,
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyModifiers, ModifierKeyCode},
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
 use std::fs;
@@ -47,6 +47,14 @@ impl Shell {
         loop {
             if let Ok(true) = event::poll(std::time::Duration::from_millis(500)) {
                 if let Event::Key(key_event) = event::read()? {
+                    if key_event.modifiers.contains(KeyModifiers::CONTROL)
+                        && key_event.code == KeyCode::Char('c')
+                    {
+                        input.clear();
+                        print!("\n");
+                        self.print_prompt(input);
+                        continue;
+                    }
                     match key_event.code {
                         KeyCode::Char(c) => self.handle_char_input(input, c)?,
                         KeyCode::Backspace => self.handle_backspace(input)?,
@@ -114,7 +122,7 @@ impl Shell {
         let terminal_width = terminal::size()?.0 as usize;
 
         // Determine the number of columns
-        let columns = (terminal_width / (max_width + 4)).max(1); // Add 4 for padding
+        let columns = (terminal_width / (max_width + 2)).max(1); // Add 4 for padding
         println!("");
         // Print files in a grid-like structure
         for (i, entry) in entries.iter().enumerate() {
