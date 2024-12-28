@@ -1,6 +1,7 @@
 use crossterm::{
+    cursor::EnableBlinking,
     event::{self, Event, KeyCode},
-    terminal::{disable_raw_mode, enable_raw_mode},
+    terminal::{self, disable_raw_mode, enable_raw_mode},
 };
 use std::fs;
 use std::io::{self, Write};
@@ -71,11 +72,74 @@ impl Shell {
                                 self.handle_arrow(input, index)?;
                             }
                         }
+                        KeyCode::Tab => {
+                            self.handle_tab(input)?;
+                        }
                         _ => {}
                     }
                 }
             }
         }
+    }
+
+    fn handle_tab(&self, input: &str) -> Result<(), Box<dyn Error>> {
+        disable_raw_mode()?;
+        let mut inp = input.split(' ').last().unwrap_or("").to_string();
+
+        // Replace `~` with the user's home directory
+        if inp.starts_with('~') {
+            inp = inp.replace(
+                "~",
+                &format!(
+                    "/home/{}",
+                    env::var("USER").unwrap_or_else(|_| "Unknown".to_string())
+                ),
+            );
+        }
+
+        // Attempt to read the directory
+        let paths = fs::read_dir(&inp)?;
+
+        // Collect entries from the ReadDir iterator
+        let entries: Vec<_> = paths.filter_map(|res| res.ok()).collect();
+
+        // Determine the maximum width of each file name
+        let max_width = entries
+            .iter()
+            .map(|entry| entry.path().file_name().unwrap().to_string_lossy().len())
+            .max()
+            .unwrap_or(0);
+
+        // Get terminal width using crossterm
+        let terminal_width = terminal::size()?.0 as usize;
+
+        // Determine the number of columns
+        let columns = (terminal_width / (max_width + 4)).max(1); // Add 4 for padding
+        println!("");
+        // Print files in a grid-like structure
+        for (i, entry) in entries.iter().enumerate() {
+            let file_name = entry
+                .path()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            print!("{:<width$}", file_name, width = max_width + 4);
+
+            // Break line after the last column
+            if (i + 1) % columns == 0 {
+                println!();
+            }
+        }
+
+        // Ensure we end with a new line
+        if entries.len() % columns != 0 {
+            println!();
+        }
+
+        self.print_prompt(input);
+        enable_raw_mode()?;
+        Ok(())
     }
 
     fn print_prompt(&self, current_input: &str) {
