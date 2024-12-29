@@ -1,8 +1,8 @@
 use crossterm::{
-    cursor::EnableBlinking,
     event::{self, Event, KeyCode, KeyModifiers, ModifierKeyCode},
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
+use regex::Regex;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -11,38 +11,39 @@ use std::{env, error::Error};
 
 pub struct Shell {
     command_history: Vec<String>,
+    input: String,
 }
 
 impl Shell {
     pub fn new() -> Shell {
         Shell {
             command_history: vec![],
+            input: "".to_string(),
         }
     }
 
     pub fn init(&mut self) {
-        let mut input = String::new();
         loop {
-            input.clear();
-            if let Err(e) = self.collect_input(&mut input) {
+            self.input.clear();
+            if let Err(e) = self.collect_input() {
                 eprintln!("Error collecting input: {}", e);
                 continue;
             }
 
-            if input.trim() == "exit" {
+            if self.input.trim() == "exit" {
                 break;
             }
 
-            if let Err(e) = self.process_input(&input) {
+            if let Err(e) = self.process_input() {
                 eprintln!("Error processing input: {}", e);
             }
         }
     }
 
-    fn collect_input(&mut self, input: &mut String) -> Result<(), Box<dyn Error>> {
+    fn collect_input(&mut self) -> Result<(), Box<dyn Error>> {
         enable_raw_mode()?;
         let mut index = self.command_history.len();
-        self.print_prompt(input);
+        self.print_prompt();
 
         loop {
             if let Ok(true) = event::poll(std::time::Duration::from_millis(500)) {
@@ -50,38 +51,38 @@ impl Shell {
                     if key_event.modifiers.contains(KeyModifiers::CONTROL)
                         && key_event.code == KeyCode::Char('c')
                     {
-                        input.clear();
+                        self.input.clear();
                         print!("\n");
-                        self.print_prompt(input);
+                        self.print_prompt();
                         continue;
                     }
                     match key_event.code {
-                        KeyCode::Char(c) => self.handle_char_input(input, c)?,
-                        KeyCode::Backspace => self.handle_backspace(input)?,
+                        KeyCode::Char(c) => self.handle_char_input(c)?,
+                        KeyCode::Backspace => self.handle_backspace()?,
                         KeyCode::Enter => {
                             disable_raw_mode()?;
-                            self.handle_enter(input);
+                            self.handle_enter();
                             return Ok(());
                         }
                         KeyCode::Up => {
                             if index > 0 {
                                 if index == self.command_history.len()
-                                    && self.command_history.last().unwrap() != input
+                                    && self.command_history.last().unwrap() != &self.input
                                 {
-                                    self.command_history.push(input.clone());
+                                    self.command_history.push(self.input.clone());
                                 }
                                 index -= 1;
-                                self.handle_arrow(input, index)?;
+                                self.handle_arrow(index)?;
                             }
                         }
                         KeyCode::Down => {
                             if index < self.command_history.len() {
                                 index += 1;
-                                self.handle_arrow(input, index)?;
+                                self.handle_arrow(index)?;
                             }
                         }
                         KeyCode::Tab => {
-                            self.handle_tab(input)?;
+                            self.handle_tab()?;
                         }
                         _ => {}
                     }
@@ -90,9 +91,14 @@ impl Shell {
         }
     }
 
-    fn handle_tab(&self, input: &str) -> Result<(), Box<dyn Error>> {
+    fn handle_tab(&mut self) -> Result<(), Box<dyn Error>> {
         disable_raw_mode()?;
-        let mut inp = input.split(' ').last().unwrap_or("").to_string();
+        let mut inp = self
+            .input
+            .split_whitespace()
+            .last()
+            .unwrap_or("")
+            .to_string();
 
         // Replace `~` with the user's home directory
         if inp.starts_with('~') {
@@ -104,6 +110,10 @@ impl Shell {
                 ),
             );
         }
+        let r = Regex::new(r"[0-9a-zA-Z]").unwrap();
+        let re = Regex::new(r"[~./]").unwrap();
+        let searched_file = re.replace_all(&inp, "").to_string();
+        inp = r.replace_all(&inp, "").to_string();
 
         // Attempt to read the directory
         let paths = fs::read_dir(&inp)?;
@@ -111,97 +121,105 @@ impl Shell {
         // Collect entries from the ReadDir iterator
         let entries: Vec<_> = paths.filter_map(|res| res.ok()).collect();
 
-        // Determine the maximum width of each file name
-        let max_width = entries
-            .iter()
-            .map(|entry| entry.path().file_name().unwrap().to_string_lossy().len())
-            .max()
-            .unwrap_or(0);
-
         // Get terminal width using crossterm
         let terminal_width = terminal::size()?.0 as usize;
 
         // Determine the number of columns
-        let columns = (terminal_width / (max_width + 2)).max(1); // Add 4 for padding
-        println!("");
+        let mut matching_file_names: Vec<String> = vec![];
         // Print files in a grid-like structure
-        for (i, entry) in entries.iter().enumerate() {
+        for (_i, entry) in entries.iter().enumerate() {
             let file_name = entry
                 .path()
                 .file_name()
                 .unwrap()
                 .to_string_lossy()
                 .to_string();
-            print!("{:<width$}", file_name, width = max_width + 4);
-
-            // Break line after the last column
-            if (i + 1) % columns == 0 {
-                println!();
+            if searched_file.len() == 0 || file_name.starts_with(&searched_file) {
+                matching_file_names.push(file_name.clone());
             }
         }
 
-        // Ensure we end with a new line
-        if entries.len() % columns != 0 {
-            println!();
-        }
+        if matching_file_names.len() > 1 {
+            // Determine the maximum width of each file name
+            let max_width = entries
+                .iter()
+                .map(|entry| entry.path().file_name().unwrap().to_string_lossy().len())
+                .max()
+                .unwrap_or(0);
+            let columns = (terminal_width / (max_width + 2)).max(1); // Add 4 for padding
+            println!("");
 
-        self.print_prompt(input);
+            for (i, value) in matching_file_names.iter().enumerate() {
+                print!("{:<width$}", value, width = max_width + 4);
+                // Break line after the last column
+                if (i + 1) % columns == 0 {
+                    println!();
+                }
+            }
+            // Ensure we end with a new line
+            if entries.len() % columns != 0 {
+                println!();
+            }
+        } else {
+            let matched = matching_file_names
+                .first()
+                .unwrap_or(&"".to_string())
+                .to_string();
+            self.input = self.input.replace(&searched_file, &matched);
+        }
+        self.print_prompt();
         enable_raw_mode()?;
         Ok(())
     }
 
-    fn print_prompt(&self, current_input: &str) {
+    fn print_prompt(&self) {
         let cwd = env::current_dir()
             .unwrap_or_default()
             .into_os_string()
             .into_string()
             .unwrap_or("".to_string());
-        print!(
-            "\r\x1b[2K{}> {}",
-            cwd.split("/").last().unwrap_or_default(),
-            current_input
-        );
+        print!("\r\x1b[2K{}> {}", cwd, self.input);
         io::stdout().flush().unwrap();
     }
 
-    fn handle_char_input(&self, current_input: &mut String, c: char) -> Result<(), Box<dyn Error>> {
-        current_input.push(c);
-        self.print_prompt(current_input);
+    fn handle_char_input(&mut self, c: char) -> Result<(), Box<dyn Error>> {
+        self.input.push(c);
+        self.print_prompt();
         Ok(())
     }
 
-    fn handle_backspace(&self, current_input: &mut String) -> Result<(), Box<dyn Error>> {
-        if !current_input.is_empty() {
-            current_input.pop();
+    fn handle_backspace(&mut self) -> Result<(), Box<dyn Error>> {
+        if !self.input.is_empty() {
+            self.input.pop();
         }
-        self.print_prompt(current_input);
+        self.print_prompt();
         Ok(())
     }
 
-    fn handle_enter(&mut self, current_input: &mut String) {
+    fn handle_enter(&mut self) {
         println!();
-        if !current_input.trim().is_empty() {
+        if !self.input.trim().is_empty() {
             if self.command_history.len() == 0
                 || self
                     .command_history
                     .last()
-                    .is_some_and(|x| x != current_input)
+                    .is_some_and(|x| x != &self.input)
             {
-                self.command_history.push(current_input.clone());
+                self.command_history.push(self.input.clone());
             }
         }
     }
 
-    fn handle_arrow(&self, current_input: &mut String, index: usize) -> Result<(), Box<dyn Error>> {
+    fn handle_arrow(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
         if index < self.command_history.len() {
-            *current_input = self.command_history[index].clone();
-            self.print_prompt(current_input);
+            self.input = self.command_history[index].clone();
+            self.print_prompt();
         }
         Ok(())
     }
 
-    fn process_input(&self, input: &str) -> Result<(), Box<dyn Error>> {
-        let mut commands = input.split(" | ").peekable();
+    fn process_input(&self) -> Result<(), Box<dyn Error>> {
+        let mut commands = self.input.split(" | ").peekable();
         let mut previous_command: Option<Child> = None;
 
         while let Some(command) = commands.next() {
