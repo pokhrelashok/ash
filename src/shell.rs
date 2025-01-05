@@ -1,9 +1,9 @@
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers, ModifierKeyCode},
+    event::{self, Event, KeyCode, KeyModifiers},
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
 use regex::Regex;
-use std::fs;
+use std::fs::{self, DirEntry};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -82,7 +82,7 @@ impl Shell {
                             }
                         }
                         KeyCode::Tab => {
-                            self.handle_tab()?;
+                            self.autocomplete()?;
                         }
                         _ => {}
                     }
@@ -91,9 +91,16 @@ impl Shell {
         }
     }
 
-    fn handle_tab(&mut self) -> Result<(), Box<dyn Error>> {
+    fn autocomplete(&mut self) -> Result<(), Box<dyn Error>> {
         disable_raw_mode()?;
-        let mut inp = self
+        let part_command = self
+            .input
+            .split_whitespace()
+            .nth(0)
+            .unwrap_or("")
+            .to_string();
+
+        let mut part_filename = self
             .input
             .split_whitespace()
             .last()
@@ -101,49 +108,47 @@ impl Shell {
             .to_string();
 
         // Replace `~` with the user's home directory
-        if inp.starts_with('~') {
-            inp = inp.replace(
+        if part_filename.starts_with('~') {
+            part_filename = part_filename.replace(
                 "~",
                 &format!(
                     "/home/{}",
                     env::var("USER").unwrap_or_else(|_| "Unknown".to_string())
                 ),
             );
+        } else if !part_filename.starts_with(".") {
+            part_filename = String::from("./") + &part_filename;
         }
-        let r = Regex::new(r"[0-9a-zA-Z]").unwrap();
-        let re = Regex::new(r"[~./]").unwrap();
-        let searched_file = re.replace_all(&inp, "").to_string();
-        inp = r.replace_all(&inp, "").to_string();
+        let regex_filename = Regex::new(r"[0-9a-zA-Z]").unwrap();
+        let part_filepath = Regex::new(r"[~./]").unwrap();
 
-        // Attempt to read the directory
-        let paths = fs::read_dir(&inp)?;
+        let searched_file = part_filepath.replace_all(&part_filename, "").to_string();
+        part_filename = regex_filename.replace_all(&part_filename, "").to_string();
 
-        // Collect entries from the ReadDir iterator
-        let entries: Vec<_> = paths.filter_map(|res| res.ok()).collect();
+        let mut entries = fs::read_dir(&part_filename)?
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, io::Error>>()?;
+        entries.sort();
 
-        // Get terminal width using crossterm
+        if part_command == "cd" {
+            entries = entries.into_iter().filter(|f| f.is_dir()).collect();
+        }
+
         let terminal_width = terminal::size()?.0 as usize;
 
-        // Determine the number of columns
         let mut matching_file_names: Vec<String> = vec![];
-        // Print files in a grid-like structure
+
         for (_i, entry) in entries.iter().enumerate() {
-            let file_name = entry
-                .path()
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
+            let file_name = entry.file_name().unwrap().to_string_lossy().to_string();
             if searched_file.len() == 0 || file_name.starts_with(&searched_file) {
                 matching_file_names.push(file_name.clone());
             }
         }
 
         if matching_file_names.len() > 1 {
-            // Determine the maximum width of each file name
             let max_width = entries
                 .iter()
-                .map(|entry| entry.path().file_name().unwrap().to_string_lossy().len())
+                .map(|entry| entry.file_name().unwrap().to_string_lossy().len())
                 .max()
                 .unwrap_or(0);
             let columns = (terminal_width / (max_width + 2)).max(1); // Add 4 for padding
@@ -160,7 +165,7 @@ impl Shell {
             if entries.len() % columns != 0 {
                 println!();
             }
-        } else {
+        } else if matching_file_names.len() == 1 {
             let matched = matching_file_names
                 .first()
                 .unwrap_or(&"".to_string())
@@ -218,8 +223,9 @@ impl Shell {
         Ok(())
     }
 
-    fn process_input(&self) -> Result<(), Box<dyn Error>> {
-        let mut commands = self.input.split(" | ").peekable();
+    fn process_input(&mut self) -> Result<(), Box<dyn Error>> {
+        let input = self.input.clone();
+        let mut commands = input.split(" | ").peekable();
         let mut previous_command: Option<Child> = None;
 
         while let Some(command) = commands.next() {
@@ -235,7 +241,7 @@ impl Shell {
     }
 
     fn execute_command(
-        &self,
+        &mut self,
         command_line: &str,
         previous_command: Option<Child>,
         has_more_commands: bool,
