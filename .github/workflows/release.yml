@@ -49,10 +49,12 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: ubuntu
+          path: ubuntu/a-shell
       - name: Download macOS Artifacts
         uses: actions/download-artifact@v3
         with:
           name: macos
+          path: ubuntu/a-shell
       - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
@@ -63,5 +65,5 @@ jobs:
           body: ''
           prerelease: false
           files: |
-            ubuntu/a-shell
-            macos/a-shell
+            ubuntu
+            macos
