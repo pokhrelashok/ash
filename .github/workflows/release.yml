@@ -53,11 +53,6 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: macos
-      - name: Extract Artifacts
-        run: |
-          mkdir -p ubuntu-artifacts macos-artifacts
-          mv ubuntu/a-shell ubuntu-artifacts/
-          mv macos/a-shell macos-artifacts/
       - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
@@ -68,5 +63,5 @@ jobs:
           body: ''
           prerelease: false
           files: |
-            ubuntu-artifacts/a-shell
-            macos-artifacts/a-shell
+            ubuntu/a-shell
+            macos/a-shell
