@@ -19,7 +19,7 @@ jobs:
       - name: Upload Artifacts from Ubuntu
         uses: actions/upload-artifact@v3
         with:
-          name: release-artifacts-ubuntu
+          name: ubuntu
           path: target/release/a-shell
 
   build-macos:
@@ -36,7 +36,7 @@ jobs:
       - name: Upload Artifacts from macOS
         uses: actions/upload-artifact@v3
         with:
-          name: release-artifacts-macos
+          name: macos
           path: target/release/a-shell
 
   release:
@@ -48,11 +48,16 @@ jobs:
       - name: Download Ubuntu Artifacts
         uses: actions/download-artifact@v3
         with:
-          name: release-artifacts-ubuntu
+          name: ubuntu
       - name: Download macOS Artifacts
         uses: actions/download-artifact@v3
         with:
-          name: release-artifacts-macos
+          name: macos
+      - name: Extract Artifacts
+        run: |
+          mkdir -p ubuntu-artifacts macos-artifacts
+          mv ubuntu/a-shell ubuntu-artifacts/
+          mv macos/a-shell macos-artifacts/
       - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
@@ -60,8 +65,8 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           name: ${{ github.ref_name }}
-          body: 'Release notes...'
+          body: ''
           prerelease: false
           files: |
-            release-artifacts-ubuntu/a-shell
-            release-artifacts-macos/a-shell
+            ubuntu-artifacts/a-shell
+            macos-artifacts/a-shell
