@@ -35,4 +35,4 @@ jobs:
           body: 'Release notes...'
           prerelease: false
           files: |
-            target/release/*.{exe,so,dylib}
+            target/release/a-shell
