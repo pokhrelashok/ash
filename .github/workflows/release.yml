@@ -6,6 +6,7 @@ on:
 
 jobs:
   build-and-release:
+    permissions: write-all
     name: Build
     runs-on: ${{ matrix.os }}
     strategy:
