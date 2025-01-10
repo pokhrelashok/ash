@@ -45,7 +45,7 @@ impl Shell {
 
     fn collect_input(&mut self) -> Result<(), Box<dyn Error>> {
         enable_raw_mode()?;
-        let mut index = self.history.commands.len();
+        let mut index = self.history.count();
         self.print_prompt();
 
         loop {
@@ -69,17 +69,15 @@ impl Shell {
                         }
                         KeyCode::Up => {
                             if index > 0 {
-                                if index == self.history.commands.len()
-                                    && self.history.commands.last().unwrap() != &self.input
-                                {
-                                    self.history.commands.push(self.input.clone());
+                                if index == self.history.count() {
+                                    self.history.add_command(&self.input);
                                 }
                                 index -= 1;
                                 self.handle_arrow(index)?;
                             }
                         }
                         KeyCode::Down => {
-                            if index < self.history.commands.len() {
+                            if index < self.history.count() {
                                 index += 1;
                                 self.handle_arrow(index)?;
                             }
@@ -207,21 +205,17 @@ impl Shell {
     fn handle_enter(&mut self) {
         println!();
         if !self.input.trim().is_empty() {
-            if self.history.commands.len() == 0
-                || self
-                    .history
-                    .commands
-                    .last()
-                    .is_some_and(|x| x != &self.input)
-            {
-                self.history.commands.push(self.input.clone());
-            }
+            self.history.add_command(&self.input);
         }
     }
 
     fn handle_arrow(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
-        if index < self.history.commands.len() {
-            self.input = self.history.commands[index].clone();
+        if index < self.history.count() {
+            self.input = self
+                .history
+                .get_command(index)
+                .map_or("", |f| f)
+                .to_string();
             self.print_prompt();
         }
         Ok(())

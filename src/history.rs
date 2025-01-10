@@ -1,12 +1,12 @@
 use std::{
     fs::{File, OpenOptions},
     io::{self, Read, Write},
-    path::{ PathBuf},
+    path::PathBuf,
 };
 
 pub struct History {
     path: PathBuf,
-    pub commands: Vec<String>,
+    commands: Vec<String>,
 }
 
 impl History {
@@ -30,8 +30,18 @@ impl History {
         Ok(Self { path, commands })
     }
 
-    pub fn add_command(&mut self, command: String) {
-        self.commands.push(command);
+    pub fn add_command(&mut self, command: &str) {
+        if self.commands.last().map_or("", |f| f) != command {
+            self.commands.push(command.to_string());
+        }
+    }
+
+    pub fn get_command(&self, index: usize) -> Option<&String> {
+        self.commands.get(index)
+    }
+
+    pub fn count(&self) -> usize {
+        self.commands.len()
     }
 }
 
