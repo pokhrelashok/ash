@@ -1,0 +1,33 @@
+name: Release
+on:
+  push:
+    tags: [ 'v*']
+jobs:
+  build-and-release:
+    name: Build
+    runs-on: {{$matrix.os}}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        toolchain:
+          - stable
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --release
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-artifacts
+          path: target/release/*.{exe,so,dylib}
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          name: ${{ github.ref_name }}
+          body: 'Release notes...'
+          prerelease: false
+          artifacts: |
+            target/release/*.{exe,so,dylib} 
