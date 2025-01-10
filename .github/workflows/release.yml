@@ -5,27 +5,54 @@ on:
     tags: ['v*']
 
 jobs:
-  build-and-release:
-    permissions: write-all
-    name: Build
-    runs-on: ${{ matrix.os }}
+  build-ubuntu:
+    name: Build on Ubuntu
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
         toolchain:
           - stable
     steps:
       - uses: actions/checkout@v3
-
-      - name: Build
+      - name: Build on Ubuntu
         run: cargo build --release
-
-      - name: Upload Artifacts
+      - name: Upload Artifacts from Ubuntu
         uses: actions/upload-artifact@v3
         with:
-          name: release-artifacts
+          name: release-artifacts-ubuntu
           path: target/release/a-shell
 
+  build-macos:
+    name: Build on macOS
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build on macOS
+        run: cargo build --release
+      - name: Upload Artifacts from macOS
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-artifacts-macos
+          path: target/release/a-shell
+
+  release:
+    needs: [build-ubuntu, build-macos]
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download Ubuntu Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: release-artifacts-ubuntu
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: release-artifacts-macos
       - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
@@ -36,4 +63,5 @@ jobs:
           body: 'Release notes...'
           prerelease: false
           files: |
-            target/release/a-shell
+            release-artifacts-ubuntu/a-shell
+            release-artifacts-macos/a-shell
