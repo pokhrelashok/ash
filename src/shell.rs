@@ -3,22 +3,24 @@ use crossterm::{
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
 use regex::Regex;
-use std::fs::{self, DirEntry};
+use std::fs::{self};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::{env, error::Error};
 
+use crate::history::History;
+
 pub struct Shell {
-    command_history: Vec<String>,
     input: String,
+    history: History,
 }
 
 impl Shell {
     pub fn new() -> Shell {
         Shell {
-            command_history: vec![],
             input: "".to_string(),
+            history: History::new("/home/pokhrelashok2/.ash_history".to_string()),
         }
     }
 
@@ -42,7 +44,7 @@ impl Shell {
 
     fn collect_input(&mut self) -> Result<(), Box<dyn Error>> {
         enable_raw_mode()?;
-        let mut index = self.command_history.len();
+        let mut index = self.history.commands.len();
         self.print_prompt();
 
         loop {
@@ -66,17 +68,17 @@ impl Shell {
                         }
                         KeyCode::Up => {
                             if index > 0 {
-                                if index == self.command_history.len()
-                                    && self.command_history.last().unwrap() != &self.input
+                                if index == self.history.commands.len()
+                                    && self.history.commands.last().unwrap() != &self.input
                                 {
-                                    self.command_history.push(self.input.clone());
+                                    self.history.commands.push(self.input.clone());
                                 }
                                 index -= 1;
                                 self.handle_arrow(index)?;
                             }
                         }
                         KeyCode::Down => {
-                            if index < self.command_history.len() {
+                            if index < self.history.commands.len() {
                                 index += 1;
                                 self.handle_arrow(index)?;
                             }
@@ -170,7 +172,7 @@ impl Shell {
                 .first()
                 .unwrap_or(&"".to_string())
                 .to_string();
-            self.input = self.input.replace(&searched_file, &matched);
+            self.input = self.input.replace(&searched_file, &matched) + "/";
         }
         self.print_prompt();
         enable_raw_mode()?;
@@ -204,20 +206,21 @@ impl Shell {
     fn handle_enter(&mut self) {
         println!();
         if !self.input.trim().is_empty() {
-            if self.command_history.len() == 0
+            if self.history.commands.len() == 0
                 || self
-                    .command_history
+                    .history
+                    .commands
                     .last()
                     .is_some_and(|x| x != &self.input)
             {
-                self.command_history.push(self.input.clone());
+                self.history.commands.push(self.input.clone());
             }
         }
     }
 
     fn handle_arrow(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
-        if index < self.command_history.len() {
-            self.input = self.command_history[index].clone();
+        if index < self.history.commands.len() {
+            self.input = self.history.commands[index].clone();
             self.print_prompt();
         }
         Ok(())
