@@ -23,7 +23,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: release-artifacts
-          path: target/release/*.{exe,so,dylib}
+          path: target/release/a-shell
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
