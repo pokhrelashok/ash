@@ -4,6 +4,9 @@ mod history;
 mod shell;
 
 fn main() {
-    let mut shell = Shell::new();
-    shell.init();
+    let shell = Shell::new();
+    match shell {
+        Ok(mut app) => app.init(),
+        Err(e) => println!("Cannot init {:?}", e),
+    }
 }

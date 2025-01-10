@@ -1,42 +1,48 @@
 use std::{
-    fs::File,
-    io::{Read, Write},
-    path::Path,
+    fs::{File, OpenOptions},
+    io::{self, Read, Write},
+    path::{ PathBuf},
 };
 
 pub struct History {
-    pub fd: File,
+    path: PathBuf,
     pub commands: Vec<String>,
 }
 
 impl History {
-    pub fn new(path: String) -> History {
-        let hist_path = Path::new(path.as_str());
-        if !hist_path.exists() {
-            let file = File::create(path.clone()).unwrap();
-            History {
-                fd: file,
-                commands: vec![],
-            }
-        } else {
-            let mut file = File::options()
-                .read(true)
-                .write(true)
-                .open(path.clone())
-                .unwrap();
-            let mut contents = String::new();
-            file.read_to_string(&mut contents).unwrap();
-            let commands = contents.split("\n").map(|f| f.to_string()).collect();
-            History { fd: file, commands }
+    pub fn new(path: impl Into<PathBuf>) -> io::Result<Self> {
+        let path = path.into();
+
+        if !path.exists() {
+            File::create(&path)?;
         }
+
+        let mut file = File::open(&path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        let commands = contents
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(String::from)
+            .collect();
+
+        Ok(Self { path, commands })
+    }
+
+    pub fn add_command(&mut self, command: String) {
+        self.commands.push(command);
     }
 }
 
 impl Drop for History {
     fn drop(&mut self) {
-        let _ = self
-            .fd
-            .write_all(self.commands.join("\n").as_bytes())
-            .expect("Cannot write history");
+        if let Ok(mut file) = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&self.path)
+        {
+            let _ = writeln!(file, "{}", self.commands.join("\n"));
+        }
     }
 }

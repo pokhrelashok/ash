@@ -17,11 +17,12 @@ pub struct Shell {
 }
 
 impl Shell {
-    pub fn new() -> Shell {
-        Shell {
+    pub fn new() -> io::Result<Self> {
+        let history = History::new("/home/pokhrelashok2/.ash_history".to_string())?;
+        Ok(Shell {
             input: "".to_string(),
-            history: History::new("/home/pokhrelashok2/.ash_history".to_string()),
-        }
+            history,
+        })
     }
 
     pub fn init(&mut self) {
