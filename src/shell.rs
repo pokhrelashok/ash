@@ -13,15 +13,28 @@ use crate::history::History;
 
 pub struct Shell {
     input: String,
+    temp_input: String,
     history: History,
+    was_last_up: bool,
+}
+
+impl Drop for Shell {
+    fn drop(&mut self) {
+        disable_raw_mode().unwrap();
+    }
 }
 
 impl Shell {
     pub fn new() -> io::Result<Self> {
-        let history = History::new("/home/pokhrelashok2/.ash_history".to_string())?;
+        let history = History::new(format!(
+            "/home/{}/.ash_history",
+            env::var("USER").unwrap_or_else(|_| "Unknown".to_string())
+        ))?;
         Ok(Shell {
             input: "".to_string(),
+            temp_input: "".to_string(),
             history,
+            was_last_up: true,
         })
     }
 
@@ -45,7 +58,7 @@ impl Shell {
 
     fn collect_input(&mut self) -> Result<(), Box<dyn Error>> {
         enable_raw_mode()?;
-        let mut index = self.history.count();
+        let mut index = 0;
         self.print_prompt();
 
         loop {
@@ -68,18 +81,32 @@ impl Shell {
                             return Ok(());
                         }
                         KeyCode::Up => {
-                            if index > 0 {
-                                if index == self.history.count() {
-                                    self.history.add_command(&self.input);
+                            if index < self.history.count() {
+                                if !self.was_last_up && index != 0 {
+                                    index -= 1
                                 }
-                                index -= 1;
+                                self.was_last_up = true;
+                                if index == 0 {
+                                    self.temp_input = self.input.clone();
+                                }
+                                if index == self.history.count() - 2 {
+                                    self.history.fetch_more();
+                                }
                                 self.handle_arrow(index)?;
+                                index += 1
                             }
                         }
                         KeyCode::Down => {
-                            if index < self.history.count() {
-                                index += 1;
+                            if index > 0 {
+                                if self.was_last_up {
+                                    index -= 1;
+                                }
+                                self.was_last_up = false;
+                                index -= 1;
                                 self.handle_arrow(index)?;
+                            } else if index == 0 {
+                                self.input = self.temp_input.clone();
+                                self.print_prompt();
                             }
                         }
                         KeyCode::Tab => {
