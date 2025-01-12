@@ -258,12 +258,40 @@ impl Shell {
             previous_command =
                 self.execute_command(command.trim(), previous_command, commands.peek().is_some())?;
         }
-
         if let Some(mut final_command) = previous_command {
             final_command.wait()?;
         }
 
         Ok(())
+    }
+
+    fn split_command_line(input: &str) -> Vec<String> {
+        let mut args = Vec::new();
+        let mut current = String::new();
+        let mut in_quotes = false;
+
+        for c in input.chars() {
+            match c {
+                '"' => {
+                    in_quotes = !in_quotes; // Toggle quote state
+                }
+                ' ' if !in_quotes => {
+                    if !current.is_empty() {
+                        args.push(current.clone());
+                        current.clear();
+                    }
+                }
+                _ => {
+                    current.push(c);
+                }
+            }
+        }
+
+        if !current.is_empty() {
+            args.push(current);
+        }
+
+        args
     }
 
     fn execute_command(
@@ -276,13 +304,13 @@ impl Shell {
             return Ok(None);
         }
 
-        let mut parts = command_line.split_whitespace();
-        let command = parts.next().ok_or("Empty command")?;
-        let args: Vec<&str> = parts.collect();
+        let parts = Shell::split_command_line(command_line);
+        let command = parts.get(0).ok_or("Empty command").unwrap().as_str();
+        let args = &parts[1..];
 
         match command {
             "cd" => {
-                self.change_directory(&args)?;
+                self.change_directory(args)?;
                 Ok(None)
             }
             "exit" | "exit;" => {
@@ -309,8 +337,8 @@ impl Shell {
         }
     }
 
-    fn change_directory(&self, args: &[&str]) -> Result<(), Box<dyn Error>> {
-        let new_dir = args.get(0).map_or("/", |&x| x);
+    fn change_directory(&self, args: &[String]) -> Result<(), Box<dyn Error>> {
+        let new_dir = args.get(0).map_or("/", |x| x);
         let root = Path::new(new_dir);
         env::set_current_dir(&root)?;
         Ok(())
