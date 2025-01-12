@@ -1,7 +1,7 @@
 use std::{
-    fs::{File, OpenOptions},
-    io::{self, BufRead, BufReader, Seek, SeekFrom, Write},
-    path::PathBuf,
+    fs::File,
+    io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
 };
 
 pub struct History {
@@ -55,24 +55,33 @@ impl History {
     pub fn count(&self) -> usize {
         self.commands.len()
     }
+    fn prepend_to_file(&mut self, data: String) -> io::Result<()> {
+        let mut f = File::open(&self.path)?;
+        let mut content = data.as_bytes().to_owned();
+        f.read_to_end(&mut content)?;
+        let mut f = File::create(&self.path)?;
+        f.write_all(content.as_slice())?;
+        Ok(())
+    }
 }
 
 impl Drop for History {
     fn drop(&mut self) {
-        if let Ok(mut file) = OpenOptions::new().write(true).append(true).open(&self.path) {
-            let _ = writeln!(
-                file,
-                "{}",
-                self.commands
-                    .iter()
-                    .filter(|f| !f.is_empty())
-                    .enumerate()
-                    .filter(|(i, _)| *i < self.new_commands_count as usize)
-                    .map(|(_, a)| a.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
-        }
+        let mut s = self
+            .commands
+            .iter()
+            .filter(|f| !f.trim().is_empty())
+            .enumerate()
+            .filter(|(i, _)| *i < self.new_commands_count as usize)
+            .map(|(_, a)| a.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if s.len() > 0 {
+            s.push_str("\n")
+        };
+
+        let _ = self.prepend_to_file(s);
     }
 }
 

@@ -1,5 +1,4 @@
 use shell::Shell;
-
 mod history;
 mod shell;
 
