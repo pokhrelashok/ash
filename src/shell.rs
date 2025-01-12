@@ -211,7 +211,8 @@ impl Shell {
             .into_os_string()
             .into_string()
             .unwrap_or("".to_string());
-        print!("\r\x1b[2K{}> {}", cwd, self.input);
+        let wdir = cwd.split("/").last().unwrap_or_default();
+        print!("\r\x1b[2K{}{}  {}", " ", wdir, self.input);
         io::stdout().flush().unwrap();
     }
 

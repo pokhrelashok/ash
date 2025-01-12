@@ -55,6 +55,7 @@ impl History {
     pub fn count(&self) -> usize {
         self.commands.len()
     }
+
     fn prepend_to_file(&mut self, data: String) -> io::Result<()> {
         let mut f = File::open(&self.path)?;
         let mut content = data.as_bytes().to_owned();
