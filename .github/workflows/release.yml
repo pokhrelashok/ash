@@ -4,60 +4,67 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
-  build-ubuntu:
-    name: Build on Ubuntu
-    runs-on: ubuntu-latest
+  build-and-upload:
+    name: Build and upload
+    runs-on: ${{ matrix.os }}
+
     strategy:
       matrix:
-        toolchain:
-          - stable
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build on Ubuntu
-        run: cargo build --release
-      - name: Upload Artifacts from Ubuntu
-        uses: actions/upload-artifact@v3
-        with:
-          name: ubuntu
-          path: target/release/a-shell
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
 
-  build-macos:
-    name: Build on macOS
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        toolchain:
-          - stable
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build on macOS
-        run: cargo build --release
-      - name: Upload Artifacts from macOS
-        uses: actions/upload-artifact@v3
-        with:
-          name: macos
-          path: target/release/a-shell
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
 
-  release:
-    needs: [build-ubuntu, build-macos]
-    permissions: write-all
-    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Download Ubuntu Artifacts
-        uses: actions/download-artifact@v3
-      - name: Download macOS Artifacts
-        uses: actions/download-artifact@v3
-      - name: Create Release
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get the release version from the tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build
+          args: --verbose --release --target ${{ matrix.target }}
+
+      - name: Build archive
+        shell: bash
+        run: |
+          binary_name="a-shell"
+          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
+          mkdir "$dirname"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
+          else
+            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+          fi
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a "$dirname.zip" "$dirname"
+            echo "ASSET=$dirname.zip" >> $GITHUB_ENV
+          else
+            tar -czf "$dirname.tar.gz" "$dirname"
+            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Release
         uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          name: ${{ github.ref_name }}
-          body: ''
-          prerelease: false
           files: |
-            ubuntu
-            macos
+            ${{ env.ASSET }}
