@@ -1,15 +1,20 @@
 use crossterm::{
+    cursor::{EnableBlinking, MoveLeft, MoveRight},
     event::{self, Event, KeyCode, KeyModifiers},
+    execute,
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
 use regex::Regex;
-use std::fs::{self};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::{env, error::Error};
+use std::{
+    fs::{self},
+    io::stdout,
+};
 
-use crate::history::History;
+use crate::{history::History, parser::parse};
 
 pub struct Shell {
     input: String,
@@ -39,6 +44,8 @@ impl Shell {
     }
 
     pub fn init(&mut self) {
+        let mut stdout = stdout();
+        execute!(stdout, EnableBlinking).unwrap();
         loop {
             self.input.clear();
             if let Err(e) = self.collect_input() {
@@ -110,7 +117,17 @@ impl Shell {
                             }
                         }
                         KeyCode::Tab => {
-                            self.autocomplete()?;
+                            if !self.input.is_empty() {
+                                self.autocomplete()?
+                            };
+                        }
+                        KeyCode::Left => {
+                            MoveLeft(1);
+                            self.print_prompt();
+                        }
+                        KeyCode::Right => {
+                            MoveRight(1);
+                            self.print_prompt();
                         }
                         _ => {}
                     }
@@ -121,44 +138,17 @@ impl Shell {
 
     fn autocomplete(&mut self) -> Result<(), Box<dyn Error>> {
         disable_raw_mode()?;
-        let part_command = self
-            .input
-            .split_whitespace()
-            .nth(0)
-            .unwrap_or("")
-            .to_string();
+        let parsed_command = parse(&self.input);
+        let searched_file = parsed_command.paths.last().map_or("", |s| s.as_str());
+        let in_path =
+            parsed_command.paths[..parsed_command.paths.len().saturating_sub(1)].join("/");
 
-        let mut part_filename = self
-            .input
-            .split_whitespace()
-            .last()
-            .unwrap_or("")
-            .to_string();
-
-        // Replace `~` with the user's home directory
-        if part_filename.starts_with('~') {
-            part_filename = part_filename.replace(
-                "~",
-                &format!(
-                    "/home/{}",
-                    env::var("USER").unwrap_or_else(|_| "Unknown".to_string())
-                ),
-            );
-        } else if !part_filename.starts_with(".") {
-            part_filename = String::from("./") + &part_filename;
-        }
-        let regex_filename = Regex::new(r"[0-9a-zA-Z]").unwrap();
-        let part_filepath = Regex::new(r"[~./]").unwrap();
-
-        let searched_file = part_filepath.replace_all(&part_filename, "").to_string();
-        part_filename = regex_filename.replace_all(&part_filename, "").to_string();
-
-        let mut entries = fs::read_dir(&part_filename)?
+        let mut entries = fs::read_dir(&in_path)?
             .map(|res| res.map(|e| e.path()))
             .collect::<Result<Vec<_>, io::Error>>()?;
         entries.sort();
 
-        if part_command == "cd" {
+        if parsed_command.command == "cd" {
             entries = entries.into_iter().filter(|f| f.is_dir()).collect();
         }
 
@@ -198,7 +188,7 @@ impl Shell {
                 .first()
                 .unwrap_or(&"".to_string())
                 .to_string();
-            self.input = self.input.replace(&searched_file, &matched) + "/";
+            self.input = self.input.replace(&searched_file, &matched);
         }
         self.print_prompt();
         enable_raw_mode()?;
@@ -265,35 +255,6 @@ impl Shell {
         Ok(())
     }
 
-    fn split_command_line(input: &str) -> Vec<String> {
-        let mut args = Vec::new();
-        let mut current = String::new();
-        let mut in_quotes = false;
-
-        for c in input.chars() {
-            match c {
-                '"' => {
-                    in_quotes = !in_quotes; // Toggle quote state
-                }
-                ' ' if !in_quotes => {
-                    if !current.is_empty() {
-                        args.push(current.clone());
-                        current.clear();
-                    }
-                }
-                _ => {
-                    current.push(c);
-                }
-            }
-        }
-
-        if !current.is_empty() {
-            args.push(current);
-        }
-
-        args
-    }
-
     fn execute_command(
         &mut self,
         command_line: &str,
@@ -303,14 +264,12 @@ impl Shell {
         if command_line.is_empty() {
             return Ok(None);
         }
-
-        let parts = Shell::split_command_line(command_line);
-        let command = parts.get(0).ok_or("Empty command").unwrap().as_str();
-        let args = &parts[1..];
+        let parsed_command = parse(&command_line);
+        let command = parsed_command.command.as_str();
 
         match command {
             "cd" => {
-                self.change_directory(args)?;
+                self.change_directory(&parsed_command.args)?;
                 Ok(None)
             }
             "exit" | "exit;" => {
@@ -327,7 +286,7 @@ impl Shell {
                 let resolved_command = self.resolve_command(command)?;
 
                 let child = Command::new(resolved_command)
-                    .args(args)
+                    .args(parsed_command.args)
                     .stdin(stdin)
                     .stdout(stdout)
                     .spawn()?;

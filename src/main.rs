@@ -1,5 +1,6 @@
 use shell::Shell;
 mod history;
+mod parser;
 mod shell;
 
 fn main() {
