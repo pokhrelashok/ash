@@ -269,7 +269,7 @@ impl Shell {
 
         match command {
             "cd" => {
-                self.change_directory(&parsed_command.args)?;
+                self.change_directory(&parsed_command.paths)?;
                 Ok(None)
             }
             "exit" | "exit;" => {
@@ -297,8 +297,8 @@ impl Shell {
     }
 
     fn change_directory(&self, args: &[String]) -> Result<(), Box<dyn Error>> {
-        let new_dir = args.get(0).map_or("/", |x| x);
-        let root = Path::new(new_dir);
+        let path = args.join("/");
+        let root = Path::new(&path);
         env::set_current_dir(&root)?;
         Ok(())
     }

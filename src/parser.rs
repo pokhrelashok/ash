@@ -76,7 +76,7 @@ fn parse_path(input: String) -> Vec<String> {
     }
 
     if !input.starts_with("/") {
-        input = format!("/{}", input);
+        input = format!("./{}", input);
     }
 
     return input.split("/").map(|f| f.to_string()).collect::<Vec<_>>();
