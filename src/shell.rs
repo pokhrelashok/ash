@@ -4,7 +4,6 @@ use crossterm::{
     execute,
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
-use regex::Regex;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -14,12 +13,13 @@ use std::{
     io::stdout,
 };
 
-use crate::{history::History, parser::parse};
+use crate::{history::History, parser::CommandParser};
 
 pub struct Shell {
     input: String,
     temp_input: String,
     history: History,
+    parser: CommandParser,
     was_last_up: bool,
 }
 
@@ -40,6 +40,7 @@ impl Shell {
             temp_input: "".to_string(),
             history,
             was_last_up: true,
+            parser: CommandParser::new(),
         })
     }
 
@@ -138,7 +139,7 @@ impl Shell {
 
     fn autocomplete(&mut self) -> Result<(), Box<dyn Error>> {
         disable_raw_mode()?;
-        let parsed_command = parse(&self.input);
+        let parsed_command = self.parser.parse(&self.input);
         let searched_file = parsed_command.paths.last().map_or("", |s| s.as_str());
         let in_path =
             parsed_command.paths[..parsed_command.paths.len().saturating_sub(1)].join("/");
@@ -264,7 +265,7 @@ impl Shell {
         if command_line.is_empty() {
             return Ok(None);
         }
-        let parsed_command = parse(&command_line);
+        let parsed_command = self.parser.parse(&command_line);
         let command = parsed_command.command.as_str();
 
         match command {

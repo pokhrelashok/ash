@@ -2,7 +2,7 @@ use shell::Shell;
 mod history;
 mod parser;
 mod shell;
-
+extern crate toml;
 fn main() {
     let shell = Shell::new();
     match shell {

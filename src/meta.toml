@@ -1,0 +1,67 @@
+[commands]
+
+# File manipulation commands
+cat = { expects = "file" }
+touch = { expects = "file" }
+cp = { expects = "any" }
+mv = { expects = "any" }
+rm = { expects = "any" }
+
+# Directory manipulation commands
+cd = { expects = "dir" }
+mkdir = { expects = "dir" }
+rmdir = { expects = "dir" }
+ls = { expects = "dir" }
+pwd = { expects = "none" }
+
+# Archive and compression commands
+tar = { expects = "any" }
+gzip = { expects = "file" }
+gunzip = { expects = "file" }
+zip = { expects = "any" }
+unzip = { expects = "file" }
+
+# Text processing commands
+less = { expects = "file" }
+more = { expects = "file" }
+head = { expects = "file" }
+tail = { expects = "file" }
+nano = { expects = "file" }
+vim = { expects = "file" }
+
+# File permission commands
+chmod = { expects = "any" }
+chown = { expects = "any" }
+chgrp = { expects = "any" }
+
+# Network-related commands
+scp = { expects = "any" }
+rsync = { expects = "any" }
+
+# Git-related commands
+git_add = { expects = "any" }
+git_commit = { expects = "none" }
+git_clone = { expects = "dir" }
+git_push = { expects = "none" }
+git_pull = { expects = "none" }
+git_status = { expects = "none" }
+
+# Package management commands
+apt_get = { expects = "none" }
+yum = { expects = "none" }
+brew = { expects = "none" }
+
+# System commands
+ps = { expects = "none" }
+top = { expects = "none" }
+kill = { expects = "none" }
+
+# Miscellaneous commands
+find = { expects = "any" }
+locate = { expects = "any" }
+grep = { expects = "file" }
+awk = { expects = "file" }
+sed = { expects = "file" }
+
+# Symbolic link creation
+ln = { expects = "any" }
