@@ -1,4 +1,5 @@
 use shell::Shell;
+mod autocomplete;
 mod history;
 mod parser;
 mod shell;

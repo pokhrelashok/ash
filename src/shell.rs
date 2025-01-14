@@ -1,8 +1,8 @@
 use crossterm::{
-    cursor::{EnableBlinking, MoveLeft, MoveRight},
+    cursor::{MoveLeft, MoveRight},
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{self, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode},
 };
 use std::io::{self, Stdout, Write};
 use std::path::{Path, PathBuf};
@@ -13,14 +13,14 @@ use std::{
     io::stdout,
 };
 
-use crate::{history::History, parser::CommandParser};
+use crate::{autocomplete::AutoComplete, history::History};
 
 pub struct Shell {
     input: String,
     temp_input: String,
     history: History,
-    parser: CommandParser,
     stdout: Stdout,
+    autocompleter: AutoComplete,
 }
 
 impl Drop for Shell {
@@ -36,11 +36,11 @@ impl Shell {
             env::var("USER").unwrap_or_else(|_| "Unknown".to_string())
         ))?;
         Ok(Shell {
+            autocompleter: AutoComplete::new(),
             stdout: stdout(),
             input: "".to_string(),
             temp_input: "".to_string(),
             history,
-            parser: CommandParser::new(),
         })
     }
 
@@ -135,60 +135,13 @@ impl Shell {
 
     fn autocomplete(&mut self) -> Result<(), Box<dyn Error>> {
         disable_raw_mode()?;
-        let parsed_command = self.parser.parse(&self.input);
-        let searched_file = parsed_command.paths.last().map_or("", |s| s.as_str());
-        let in_path =
-            parsed_command.paths[..parsed_command.paths.len().saturating_sub(1)].join("/");
-
-        let mut entries = fs::read_dir(&in_path)?
-            .map(|res| res.map(|e| e.path()))
-            .collect::<Result<Vec<_>, io::Error>>()?;
-        entries.sort();
-
-        if parsed_command.command == "cd" {
-            entries = entries.into_iter().filter(|f| f.is_dir()).collect();
-        }
-
-        let terminal_width = terminal::size()?.0 as usize;
-
-        let mut matching_file_names: Vec<String> = vec![];
-
-        for (_i, entry) in entries.iter().enumerate() {
-            let file_name = entry.file_name().unwrap().to_string_lossy().to_string();
-            println!("{}", file_name);
-            if searched_file.len() == 0 || file_name.starts_with(&searched_file) {
-                matching_file_names.push(file_name.clone());
+        match self.autocompleter.autocomplete(self.input.as_str()) {
+            Ok(new_command) => {
+                self.input = new_command;
+                self.print_prompt();
             }
+            Err(_) => todo!(),
         }
-
-        if matching_file_names.len() > 1 {
-            let max_width = entries
-                .iter()
-                .map(|entry| entry.file_name().unwrap().to_string_lossy().len())
-                .max()
-                .unwrap_or(0);
-            let columns = (terminal_width / (max_width + 2)).max(1); // Add 4 for padding
-            println!("");
-
-            for (i, value) in matching_file_names.iter().enumerate() {
-                print!("{:<width$}", value, width = max_width + 4);
-                // Break line after the last column
-                if (i + 1) % columns == 0 {
-                    println!();
-                }
-            }
-            // Ensure we end with a new line
-            if entries.len() % columns != 0 {
-                println!();
-            }
-        } else if matching_file_names.len() == 1 {
-            let matched = matching_file_names
-                .first()
-                .unwrap_or(&"".to_string())
-                .to_string();
-            self.input = self.input.replace(&searched_file, &matched);
-        }
-        self.print_prompt();
         enable_raw_mode()?;
         Ok(())
     }
@@ -262,7 +215,7 @@ impl Shell {
         if command_line.is_empty() {
             return Ok(None);
         }
-        let parsed_command = self.parser.parse(&command_line);
+        let parsed_command = self.autocompleter.parser.parse(&command_line);
         let command = parsed_command.command.as_str();
 
         match command {
