@@ -4,7 +4,7 @@ use crossterm::{
     execute,
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
-use std::io::{self, Write};
+use std::io::{self, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::{env, error::Error};
@@ -20,7 +20,7 @@ pub struct Shell {
     temp_input: String,
     history: History,
     parser: CommandParser,
-    was_last_up: bool,
+    stdout: Stdout,
 }
 
 impl Drop for Shell {
@@ -36,17 +36,15 @@ impl Shell {
             env::var("USER").unwrap_or_else(|_| "Unknown".to_string())
         ))?;
         Ok(Shell {
+            stdout: stdout(),
             input: "".to_string(),
             temp_input: "".to_string(),
             history,
-            was_last_up: true,
             parser: CommandParser::new(),
         })
     }
 
     pub fn init(&mut self) {
-        let mut stdout = stdout();
-        execute!(stdout, EnableBlinking).unwrap();
         loop {
             self.input.clear();
             if let Err(e) = self.collect_input() {
@@ -66,7 +64,7 @@ impl Shell {
 
     fn collect_input(&mut self) -> Result<(), Box<dyn Error>> {
         enable_raw_mode()?;
-        let mut index = 0;
+        let mut index: i32 = -1;
         self.print_prompt();
 
         loop {
@@ -76,6 +74,7 @@ impl Shell {
                         && key_event.code == KeyCode::Char('c')
                     {
                         self.input.clear();
+                        index = -1;
                         print!("\n");
                         self.print_prompt();
                         continue;
@@ -89,30 +88,29 @@ impl Shell {
                             return Ok(());
                         }
                         KeyCode::Up => {
-                            if index < self.history.count() {
-                                if !self.was_last_up && index != 0 {
-                                    index -= 1
-                                }
-                                self.was_last_up = true;
-                                if index == 0 {
+                            if index < (self.history.count() - 1) as i32 {
+                                if index == -1 {
                                     self.temp_input = self.input.clone();
                                 }
-                                if index == self.history.count() - 2 {
+
+                                index += 1;
+                                if self.history.count() >= 10
+                                    && index as usize == self.history.count() - 2
+                                {
                                     self.history.fetch_more();
                                 }
-                                self.handle_arrow(index)?;
-                                index += 1
+                                self.handle_arrow(index as usize)?;
                             }
                         }
                         KeyCode::Down => {
+                            if index < 0 {
+                                continue;
+                            }
                             if index > 0 {
-                                if self.was_last_up {
-                                    index -= 1;
-                                }
-                                self.was_last_up = false;
                                 index -= 1;
-                                self.handle_arrow(index)?;
-                            } else if index == 0 {
+                                self.handle_arrow(index as usize)?;
+                            } else {
+                                index = -1;
                                 self.input = self.temp_input.clone();
                                 self.print_prompt();
                             }
@@ -123,12 +121,10 @@ impl Shell {
                             };
                         }
                         KeyCode::Left => {
-                            MoveLeft(1);
-                            self.print_prompt();
+                            execute!(self.stdout, MoveLeft(1)).unwrap();
                         }
                         KeyCode::Right => {
-                            MoveRight(1);
-                            self.print_prompt();
+                            execute!(self.stdout, MoveRight(1)).unwrap();
                         }
                         _ => {}
                     }
@@ -159,6 +155,7 @@ impl Shell {
 
         for (_i, entry) in entries.iter().enumerate() {
             let file_name = entry.file_name().unwrap().to_string_lossy().to_string();
+            println!("{}", file_name);
             if searched_file.len() == 0 || file_name.starts_with(&searched_file) {
                 matching_file_names.push(file_name.clone());
             }
