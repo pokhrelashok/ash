@@ -11,20 +11,20 @@ pub struct Suggestion {
     is_dir: bool,
 }
 
-pub struct AutoComplete {
-    pub parser: CommandParser,
-}
+pub struct AutoComplete {}
 
 impl AutoComplete {
     pub fn new() -> Self {
-        return AutoComplete {
-            parser: CommandParser::new(),
-        };
+        return AutoComplete {};
     }
 
-    pub fn autocomplete(&self, command: &str) -> Result<String, Box<dyn Error>> {
+    pub fn autocomplete(
+        &self,
+        command: &str,
+        parser: &CommandParser,
+    ) -> Result<String, Box<dyn Error>> {
         let mut new_value = String::from(command);
-        let parsed_command = self.parser.parse(command);
+        let parsed_command = parser.parse(command);
         let searched_file = parsed_command.paths.last().map_or("", |s| s.as_str());
         let in_path =
             parsed_command.paths[..parsed_command.paths.len().saturating_sub(1)].join("/");
