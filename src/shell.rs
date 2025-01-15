@@ -4,11 +4,11 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use std::io::stdout;
-use std::io::{self, Stdout, Write};
+use std::io::{self, BufRead, BufReader, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::{env, error::Error};
+use std::{fs::File, io::stdout};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -240,11 +240,11 @@ impl Shell {
         let pos = (x - self.prompt_length) as usize;
         if pos > 0 {
             self.input.remove(pos - 1);
-            self.print_prompt();
-            execute!(self.stdout, MoveTo(if x > 0 { x - 1 } else { x }, y)).unwrap();
             if self.input.len() > 0 {
                 self.suggestions = get_command_suggestion(&self.history.commands, &self.input)
             }
+            self.print_prompt();
+            execute!(self.stdout, MoveTo(if x > 0 { x - 1 } else { x }, y)).unwrap();
         }
         Ok(())
     }
@@ -306,6 +306,10 @@ impl Shell {
                 self.change_directory(&parsed_command.paths)?;
                 Ok(None)
             }
+            "source" => {
+                self.source_file(parsed_command.paths.join("/").as_str())?;
+                Ok(None)
+            }
             "exit" | "exit;" => {
                 std::process::exit(0);
             }
@@ -341,7 +345,8 @@ impl Shell {
         if command.contains('/') {
             Ok(command.to_string())
         } else {
-            let binary_locations = vec!["/bin", "/usr/bin"];
+            let path = env::var("PATH").unwrap_or_default();
+            let binary_locations = path.split(":").collect::<Vec<_>>();
             for location in binary_locations {
                 let full_path: PathBuf = Path::new(location).join(command);
                 if full_path.exists() {
@@ -364,5 +369,46 @@ impl Shell {
         } else {
             Stdio::inherit()
         }
+    }
+
+    fn source_file(&mut self, filename: &str) -> Result<(), Box<dyn Error>> {
+        // Open the file
+        let file = File::open(filename)?;
+        let reader = BufReader::new(file);
+
+        // Read the file line by line
+        for line in reader.lines() {
+            let line = line?;
+            let trimmed_line = line.trim();
+
+            // Skip empty lines and comments
+            if trimmed_line.is_empty() || trimmed_line.starts_with('#') {
+                continue;
+            }
+
+            // Split the line into command and arguments
+            let mut parts = trimmed_line.split_whitespace();
+            let command = parts.next().unwrap_or("");
+            let args: Vec<&str> = parts.collect();
+
+            // Execute the command
+            match Command::new(command)
+                .args(&args)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+            {
+                Ok(status) => {
+                    if !status.success() {
+                        eprintln!("Command exited with status: {}", status);
+                    }
+                }
+                Err(err) => {
+                    eprintln!("Error executing command: {}", err);
+                }
+            }
+        }
+
+        Ok(())
     }
 }

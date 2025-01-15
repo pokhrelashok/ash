@@ -31,6 +31,9 @@ impl CommandParser {
             if f.starts_with("~") {
                 *f = self.parse_path(f).join("/");
             }
+            if f.starts_with("$") {
+                *f = self.replace_env_vars(f);
+            }
         });
         let path = args.last().map_or("", |f| f).to_owned();
         let paths = self.parse_path(&path);
@@ -112,5 +115,10 @@ impl CommandParser {
         }
 
         return input.split("/").map(|f| f.to_string()).collect::<Vec<_>>();
+    }
+
+    fn replace_env_vars(&self, input: &str) -> String {
+        let val = env::var(input.replace("$", "")).unwrap_or_default();
+        return val;
     }
 }
