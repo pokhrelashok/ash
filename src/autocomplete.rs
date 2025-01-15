@@ -58,12 +58,11 @@ impl AutoComplete {
                 .map(|entry| entry.file_name().unwrap().to_string_lossy().len())
                 .max()
                 .unwrap_or(0);
-            let columns = (terminal_width / (max_width + 2)).max(1); // Add 4 for padding
+            let columns = terminal_width / (max_width + 2); // Add 4 for padding
             println!("");
 
             for (i, suggestion) in matching_file_names.iter().enumerate() {
-                print!("{:<width$}", suggestion.file_name, width = max_width + 4);
-                // Break line after the last column
+                print!("{:<width$}", suggestion.file_name, width = max_width);
                 if (i + 1) % columns == 0 {
                     println!();
                 }
