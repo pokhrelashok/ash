@@ -7,7 +7,7 @@ use std::{
 pub struct History {
     path: PathBuf,
     reader: LineReader,
-    commands: Vec<String>,
+    pub commands: Vec<String>,
     new_commands_count: u32,
 }
 
@@ -20,7 +20,7 @@ impl History {
         }
 
         let mut reader = LineReader::new(&path)?;
-        let commands = reader.read_lines(10)?;
+        let commands = reader.read_lines(100)?;
 
         Ok(Self {
             path,

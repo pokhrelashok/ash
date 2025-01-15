@@ -4,6 +4,7 @@ mod autocomplete;
 mod history;
 mod parser;
 mod shell;
+mod suggestion;
 extern crate toml;
 fn main() {
     let shell = Shell::new();

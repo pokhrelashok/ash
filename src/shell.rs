@@ -13,6 +13,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     about::print_about, autocomplete::AutoComplete, history::History, parser::CommandParser,
+    suggestion::get_command_suggestion,
 };
 
 pub struct Shell {
@@ -23,6 +24,8 @@ pub struct Shell {
     autocompleter: AutoComplete,
     parser: CommandParser,
     prompt_length: u16,
+    suggestions: Vec<String>,
+    suggestion_index: u8,
 }
 
 impl Drop for Shell {
@@ -44,6 +47,8 @@ impl Shell {
             temp_input: "".to_string(),
             history,
             prompt_length: 0,
+            suggestions: vec![],
+            suggestion_index: 0,
             parser: CommandParser::new(),
         })
     }
@@ -68,7 +73,7 @@ impl Shell {
 
     fn collect_input(&mut self) -> Result<(), Box<dyn Error>> {
         enable_raw_mode()?;
-        let mut index: i32 = -1;
+        let mut index: i8 = -1;
         self.print_prompt();
 
         loop {
@@ -92,7 +97,15 @@ impl Shell {
                             return Ok(());
                         }
                         KeyCode::Up => {
-                            if index < (self.history.count() - 1) as i32 {
+                            if self.suggestions.len() > 0 {
+                                if self.suggestion_index < self.suggestions.len() as u8 {
+                                    self.suggestion_index += 1;
+                                    self.print_prompt();
+                                }
+                                continue;
+                            }
+
+                            if index < (self.history.count() - 1) as i8 {
                                 if index == -1 {
                                     self.temp_input = self.input.clone();
                                 }
@@ -107,6 +120,11 @@ impl Shell {
                             }
                         }
                         KeyCode::Down => {
+                            if self.suggestions.len() > 0 && self.suggestion_index > 0 {
+                                self.suggestion_index -= 1;
+                                self.print_prompt();
+                                continue;
+                            }
                             if index < 0 {
                                 continue;
                             }
@@ -134,7 +152,20 @@ impl Shell {
                         KeyCode::Right => {
                             let (x, _) = cursor::position().unwrap();
                             if x > self.prompt_length - 1 + self.input.len() as u16 {
-                                continue;
+                                if !self.suggestions.is_empty() {
+                                    self.input = format!(
+                                        "{}{}",
+                                        self.input,
+                                        self.suggestions
+                                            .get(self.suggestion_index as usize)
+                                            .map_or("", |x| x)
+                                            .replace(&self.input, "")
+                                    );
+                                    self.print_prompt();
+                                    continue;
+                                } else {
+                                    continue;
+                                }
                             }
 
                             execute!(self.stdout, MoveRight(1)).unwrap();
@@ -172,12 +203,28 @@ impl Shell {
         let prompt = format!("{}{} > ", "  ", wdir);
         self.prompt_length = prompt.graphemes(true).count() as u16;
         print!("\r\x1b[2K{}{}", prompt, self.input);
+        print!(
+            "\x1b[2m{}\x1b[0m",
+            self.suggestions
+                .get(self.suggestion_index as usize)
+                .map_or("", |x| x)
+                .replace(&self.input, "")
+        );
+        let (_, y) = cursor::position().unwrap();
+        execute!(
+            self.stdout,
+            MoveTo(self.prompt_length + self.input.len() as u16, y)
+        )
+        .unwrap();
         io::stdout().flush().unwrap();
     }
 
     fn handle_char_input(&mut self, c: char) -> Result<(), Box<dyn Error>> {
         let (x, y) = cursor::position().unwrap();
         self.input.insert((x - self.prompt_length) as usize, c);
+        if self.input.len() > 2 {
+            self.suggestions = get_command_suggestion(&self.history.commands, &self.input)
+        }
         self.print_prompt();
         execute!(self.stdout, MoveTo(x + 1, y)).unwrap();
         Ok(())
@@ -193,6 +240,9 @@ impl Shell {
             self.input.remove(pos - 1);
             self.print_prompt();
             execute!(self.stdout, MoveTo(if x > 0 { x - 1 } else { x }, y)).unwrap();
+            if self.input.len() > 2 {
+                self.suggestions = get_command_suggestion(&self.history.commands, &self.input)
+            }
         }
         Ok(())
     }
@@ -229,6 +279,8 @@ impl Shell {
             final_command.wait()?;
         }
 
+        self.suggestion_index = 0;
+        self.suggestions = vec![];
         Ok(())
     }
 
