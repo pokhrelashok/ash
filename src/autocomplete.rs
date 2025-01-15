@@ -5,6 +5,7 @@ use crate::parser::CommandParser;
 use std::error::Error;
 use std::fs::{self};
 use std::io::{self};
+use std::path::PathBuf;
 
 pub struct Suggestion {
     file_name: String,
@@ -53,23 +54,30 @@ impl AutoComplete {
         }
 
         if matching_file_names.len() > 1 {
-            let max_width = entries
-                .iter()
-                .map(|entry| entry.file_name().unwrap().to_string_lossy().len())
-                .max()
-                .unwrap_or(0);
-            let columns = terminal_width / (max_width + 2); // Add 4 for padding
-            println!("");
+            let longest_match = self.get_longest_match(&matching_file_names, searched_file);
 
-            for (i, suggestion) in matching_file_names.iter().enumerate() {
-                print!("{:<width$}", suggestion.file_name, width = max_width);
-                if (i + 1) % columns == 0 {
+            if longest_match.len() > searched_file.len() {
+                new_value = command.replace(&searched_file, &format!("{}", longest_match));
+            } else {
+                let max_width = entries
+                    .iter()
+                    .map(|entry| entry.file_name().unwrap().to_string_lossy().len())
+                    .max()
+                    .unwrap_or(0);
+                let columns = terminal_width / (max_width + 2); // Add 4 for padding
+                println!("");
+
+                for (i, suggestion) in matching_file_names.iter().enumerate() {
+                    print!("{:<width$}", suggestion.file_name, width = max_width);
+                    if (i + 1) % columns == 0 {
+                        println!();
+                    }
+                }
+
+                // Ensure we end with a new line
+                if entries.len() % columns != 0 {
                     println!();
                 }
-            }
-            // Ensure we end with a new line
-            if entries.len() % columns != 0 {
-                println!();
             }
         } else if matching_file_names.len() == 1 {
             let matched = matching_file_names.first().unwrap();
@@ -83,5 +91,28 @@ impl AutoComplete {
             );
         }
         Ok(new_value)
+    }
+
+    fn get_longest_match(&self, entries: &Vec<Suggestion>, search: &str) -> String {
+        let mut longest_match = String::from(search);
+        let mut len = longest_match.len();
+        let first_entry = entries.first().unwrap().to_owned();
+        loop {
+            len += 1;
+            let mut success = true;
+            let (trying_match, _) = first_entry.file_name.split_at(len);
+            for entry in entries {
+                if !entry.file_name.starts_with(trying_match) {
+                    success = false;
+                    break;
+                }
+            }
+            if success {
+                longest_match = String::from(trying_match);
+            } else {
+                break;
+            }
+        }
+        longest_match
     }
 }
