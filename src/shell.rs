@@ -68,6 +68,7 @@ impl Shell {
             if let Err(e) = self.process_input() {
                 eprintln!("Error processing input: {}", e);
             }
+            self.reset_states();
         }
     }
 
@@ -223,7 +224,7 @@ impl Shell {
     fn handle_char_input(&mut self, c: char) -> Result<(), Box<dyn Error>> {
         let (x, y) = cursor::position().unwrap();
         self.input.insert((x - self.prompt_length) as usize, c);
-        if self.input.len() > 2 {
+        if self.input.len() > 0 {
             self.suggestions = get_command_suggestion(&self.history.commands, &self.input)
         }
         self.print_prompt();
@@ -241,7 +242,7 @@ impl Shell {
             self.input.remove(pos - 1);
             self.print_prompt();
             execute!(self.stdout, MoveTo(if x > 0 { x - 1 } else { x }, y)).unwrap();
-            if self.input.len() > 2 {
+            if self.input.len() > 0 {
                 self.suggestions = get_command_suggestion(&self.history.commands, &self.input)
             }
         }
@@ -279,7 +280,6 @@ impl Shell {
         if let Some(mut final_command) = previous_command {
             final_command.wait()?;
         }
-        self.reset_states();
         Ok(())
     }
 
