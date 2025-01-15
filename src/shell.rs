@@ -105,7 +105,8 @@ impl Shell {
                                 continue;
                             }
 
-                            if index < (self.history.count() - 1) as i8 {
+                            if self.history.count() > 0 && index < (self.history.count() - 1) as i8
+                            {
                                 if index == -1 {
                                     self.temp_input = self.input.clone();
                                 }

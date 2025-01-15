@@ -27,6 +27,11 @@ impl CommandParser {
             .take(args.len() - 1)
             .map(|f| f.clone())
             .collect::<Vec<_>>();
+        args.iter_mut().for_each(|f| {
+            if f.starts_with("~") {
+                *f = self.parse_path(f).join("/");
+            }
+        });
         let path = args.last().map_or("", |f| f).to_owned();
         let paths = self.parse_path(&path);
         let meta = self.metadata.get(
