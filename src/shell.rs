@@ -82,7 +82,7 @@ impl Shell {
                     if key_event.modifiers.contains(KeyModifiers::CONTROL)
                         && key_event.code == KeyCode::Char('c')
                     {
-                        self.input.clear();
+                        self.reset_states();
                         index = -1;
                         print!("\n");
                         self.print_prompt();
@@ -278,10 +278,14 @@ impl Shell {
         if let Some(mut final_command) = previous_command {
             final_command.wait()?;
         }
-
-        self.suggestion_index = 0;
-        self.suggestions = vec![];
+        self.reset_states();
         Ok(())
+    }
+
+    fn reset_states(&mut self) {
+        self.suggestion_index = 0;
+        self.input.clear();
+        self.suggestions.clear();
     }
 
     fn execute_command(
