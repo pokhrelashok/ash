@@ -9,6 +9,7 @@ use std::io::{self, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::{env, error::Error};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     about::print_about, autocomplete::AutoComplete, history::History, parser::CommandParser,
@@ -168,8 +169,8 @@ impl Shell {
             .into_string()
             .unwrap_or("".to_string());
         let wdir = cwd.split("/").last().unwrap_or_default();
-        let prompt = format!("{}{} > ", "", wdir);
-        self.prompt_length = prompt.len() as u16;
+        let prompt = format!("{}{} > ", "  ", wdir);
+        self.prompt_length = prompt.graphemes(true).count() as u16;
         print!("\r\x1b[2K{}{}", prompt, self.input);
         io::stdout().flush().unwrap();
     }
@@ -183,10 +184,16 @@ impl Shell {
     }
 
     fn handle_backspace(&mut self) -> Result<(), Box<dyn Error>> {
-        if !self.input.is_empty() {
-            self.input.pop();
+        if self.input.len() == 0 {
+            return Ok(());
         }
-        self.print_prompt();
+        let (x, y) = cursor::position().unwrap();
+        let pos = (x - self.prompt_length) as usize;
+        if pos > 0 {
+            self.input.remove(pos - 1);
+            self.print_prompt();
+            execute!(self.stdout, MoveTo(if x > 0 { x - 1 } else { x }, y)).unwrap();
+        }
         Ok(())
     }
 
