@@ -1,17 +1,14 @@
 use crossterm::{
-    cursor::{MoveLeft, MoveRight},
+    cursor::{self, MoveLeft, MoveRight, MoveTo},
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode},
 };
+use std::io::stdout;
 use std::io::{self, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::{env, error::Error};
-use std::{
-    fs::{self},
-    io::stdout,
-};
 
 use crate::{
     about::print_about, autocomplete::AutoComplete, history::History, parser::CommandParser,
@@ -24,6 +21,7 @@ pub struct Shell {
     stdout: Stdout,
     autocompleter: AutoComplete,
     parser: CommandParser,
+    prompt_length: u16,
 }
 
 impl Drop for Shell {
@@ -44,6 +42,7 @@ impl Shell {
             input: "".to_string(),
             temp_input: "".to_string(),
             history,
+            prompt_length: 0,
             parser: CommandParser::new(),
         })
     }
@@ -125,9 +124,18 @@ impl Shell {
                             };
                         }
                         KeyCode::Left => {
+                            let (x, _) = cursor::position().unwrap();
+                            if x <= self.prompt_length {
+                                continue;
+                            }
                             execute!(self.stdout, MoveLeft(1)).unwrap();
                         }
                         KeyCode::Right => {
+                            let (x, _) = cursor::position().unwrap();
+                            if x > self.prompt_length - 1 + self.input.len() as u16 {
+                                continue;
+                            }
+
                             execute!(self.stdout, MoveRight(1)).unwrap();
                         }
                         _ => {}
@@ -153,20 +161,24 @@ impl Shell {
         Ok(())
     }
 
-    fn print_prompt(&self) {
+    fn print_prompt(&mut self) {
         let cwd = env::current_dir()
             .unwrap_or_default()
             .into_os_string()
             .into_string()
             .unwrap_or("".to_string());
         let wdir = cwd.split("/").last().unwrap_or_default();
-        print!("\r\x1b[2K{}{}  {}", " ", wdir, self.input);
+        let prompt = format!("{}{} > ", "", wdir);
+        self.prompt_length = prompt.len() as u16;
+        print!("\r\x1b[2K{}{}", prompt, self.input);
         io::stdout().flush().unwrap();
     }
 
     fn handle_char_input(&mut self, c: char) -> Result<(), Box<dyn Error>> {
-        self.input.push(c);
+        let (x, y) = cursor::position().unwrap();
+        self.input.insert((x - self.prompt_length) as usize, c);
         self.print_prompt();
+        execute!(self.stdout, MoveTo(x + 1, y)).unwrap();
         Ok(())
     }
 
