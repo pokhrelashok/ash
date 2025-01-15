@@ -5,7 +5,6 @@ use crate::parser::CommandParser;
 use std::error::Error;
 use std::fs::{self};
 use std::io::{self};
-use std::path::PathBuf;
 
 pub struct Suggestion {
     file_name: String,
