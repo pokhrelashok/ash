@@ -202,9 +202,10 @@ impl Shell {
             .into_string()
             .unwrap_or("".to_string());
         let wdir = cwd.split("/").last().unwrap_or_default();
-        let prompt = format!("{}{} > ", "  ", wdir);
+        let prompt = format!("{}{}  ", "  ", wdir);
         self.prompt_length = prompt.graphemes(true).count() as u16;
-        print!("\r\x1b[2K{}{}", prompt, self.input);
+        execute!(self.stdout, cursor::Hide).unwrap();
+        print!("\r\x1b[2K\x1b[1;34m{}\x1b[0m{}", prompt, self.input);
         print!(
             "\x1b[2m{}\x1b[0m",
             self.suggestions
@@ -218,6 +219,7 @@ impl Shell {
             MoveTo(self.prompt_length + self.input.len() as u16, y)
         )
         .unwrap();
+        execute!(self.stdout, cursor::Show).unwrap();
         io::stdout().flush().unwrap();
     }
 
