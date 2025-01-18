@@ -205,14 +205,16 @@ impl Shell {
         let prompt = format!("{}{}  ", "  ", wdir);
         self.prompt_length = prompt.graphemes(true).count() as u16;
         execute!(self.stdout, cursor::Hide).unwrap();
-        print!("\r\x1b[2K\x1b[1;34m{}\x1b[0m{}", prompt, self.input);
-        print!(
-            "\x1b[2m{}\x1b[0m",
-            self.suggestions
-                .get(self.suggestion_index as usize)
-                .map_or("", |x| x)
-                .replace(&self.input, "")
-        );
+        print!("\r\x1b[2K\x1b[34m{}\x1b[0m{}", prompt, self.input);
+        if self.input.len() > 0 {
+            print!(
+                "\x1b[2m{}\x1b[0m",
+                self.suggestions
+                    .get(self.suggestion_index as usize)
+                    .map_or("", |x| x)
+                    .replace(&self.input, "")
+            );
+        }
         let (_, y) = cursor::position().unwrap();
         execute!(
             self.stdout,
@@ -275,13 +277,38 @@ impl Shell {
         let mut commands = input.split(" | ").peekable();
         let mut previous_command: Option<Child> = None;
 
-        while let Some(command) = commands.next() {
-            previous_command =
-                self.execute_command(command.trim(), previous_command, commands.peek().is_some())?;
+        while let Some(command_group) = commands.next() {
+            let mut split_commands = command_group.split(" && ").peekable();
+
+            while let Some(command) = split_commands.next() {
+                // Execute the current command
+                let mut current_command = self.execute_command(
+                    command.trim(),
+                    previous_command.take(),
+                    commands.peek().is_some() || split_commands.peek().is_some(),
+                )?;
+
+                // If there are more commands after &&, check the success of the previous one
+                if split_commands.peek().is_some() {
+                    if let Some(ref mut child) = current_command {
+                        let status = child.wait()?;
+                        if !status.success() {
+                            // If the current command fails, stop processing this group
+                            break;
+                        }
+                    }
+                }
+
+                // Update previous_command for the next iteration
+                previous_command = current_command;
+            }
         }
+
+        // Wait for the last command in the pipeline to finish
         if let Some(mut final_command) = previous_command {
             final_command.wait()?;
         }
+
         Ok(())
     }
 
@@ -308,10 +335,6 @@ impl Shell {
                 self.change_directory(&parsed_command.paths)?;
                 Ok(None)
             }
-            "source" => {
-                self.source_file(parsed_command.paths.join("/").as_str())?;
-                Ok(None)
-            }
             "exit" | "exit;" => {
                 std::process::exit(0);
             }
@@ -323,7 +346,7 @@ impl Shell {
                 let stdin = self.get_stdin(previous_command);
                 let stdout = self.get_stdout(has_more_commands);
 
-                let resolved_command = self.resolve_command(command)?;
+                let resolved_command = self.resolve_path(command)?;
 
                 let child = Command::new(resolved_command)
                     .args(parsed_command.args)
@@ -343,7 +366,7 @@ impl Shell {
         Ok(())
     }
 
-    fn resolve_command(&self, command: &str) -> Result<String, Box<dyn Error>> {
+    fn resolve_path(&self, command: &str) -> Result<String, Box<dyn Error>> {
         if command.contains('/') {
             Ok(command.to_string())
         } else {
@@ -371,46 +394,5 @@ impl Shell {
         } else {
             Stdio::inherit()
         }
-    }
-
-    fn source_file(&mut self, filename: &str) -> Result<(), Box<dyn Error>> {
-        // Open the file
-        let file = File::open(filename)?;
-        let reader = BufReader::new(file);
-
-        // Read the file line by line
-        for line in reader.lines() {
-            let line = line?;
-            let trimmed_line = line.trim();
-
-            // Skip empty lines and comments
-            if trimmed_line.is_empty() || trimmed_line.starts_with('#') {
-                continue;
-            }
-
-            // Split the line into command and arguments
-            let mut parts = trimmed_line.split_whitespace();
-            let command = parts.next().unwrap_or("");
-            let args: Vec<&str> = parts.collect();
-
-            // Execute the command
-            match Command::new(command)
-                .args(&args)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-            {
-                Ok(status) => {
-                    if !status.success() {
-                        eprintln!("Command exited with status: {}", status);
-                    }
-                }
-                Err(err) => {
-                    eprintln!("Error executing command: {}", err);
-                }
-            }
-        }
-
-        Ok(())
     }
 }
