@@ -285,7 +285,7 @@ impl Shell {
                 let mut current_command = self.execute_command(
                     command.trim(),
                     previous_command.take(),
-                    commands.peek().is_some() || split_commands.peek().is_some(),
+                    commands.peek().is_some(),
                 )?;
 
                 // If there are more commands after &&, check the success of the previous one
