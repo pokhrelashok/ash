@@ -161,7 +161,7 @@ impl Shell {
                                         self.suggestions
                                             .get(self.suggestion_index as usize)
                                             .map_or("", |x| x)
-                                            .replace(&self.input, "")
+                                            .replacen(&self.input, "", 1)
                                     );
                                     self.print_prompt();
                                     continue;
@@ -212,7 +212,7 @@ impl Shell {
                 self.suggestions
                     .get(self.suggestion_index as usize)
                     .map_or("", |x| x)
-                    .replace(&self.input, "")
+                    .replacen(&self.input, "", 1)
             );
         }
         let (_, y) = cursor::position().unwrap();
