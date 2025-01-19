@@ -342,6 +342,10 @@ impl Shell {
                 print_about();
                 Ok(None)
             }
+            "pwd" => {
+                self.print_pwd();
+                Ok(None)
+            }
             _ => {
                 let stdin = self.get_stdin(previous_command);
                 let stdout = self.get_stdout(has_more_commands);
@@ -357,6 +361,11 @@ impl Shell {
                 Ok(Some(child))
             }
         }
+    }
+
+    fn print_pwd(&self) {
+        let cwd = env::current_dir().unwrap_or_default();
+        println!("{}", cwd.to_string_lossy());
     }
 
     fn change_directory(&self, args: &[String]) -> Result<(), Box<dyn Error>> {
