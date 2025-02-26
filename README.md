@@ -1,3 +1,5 @@
 # Simple shell made in rust
-## Command history
-## Autocompletions
+## Features
+
+1. Command History
+2. Command Autocomplete 
